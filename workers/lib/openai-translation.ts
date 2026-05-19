@@ -141,6 +141,41 @@ export function isChineseLanguage(
 	);
 }
 
+export function isTraditionalChineseLanguage(
+	language?: string | null,
+	languageName?: string | null,
+): boolean {
+	const code = (language || "").toLowerCase();
+	const name = (languageName || "").toLowerCase();
+	return (
+		code === "zh-hant" ||
+		code.startsWith("zh-hant-") ||
+		code === "zh-tw" ||
+		code === "zh-hk" ||
+		code === "zh-mo" ||
+		name.includes("traditional chinese") ||
+		name.includes("繁體") ||
+		name.includes("繁体") ||
+		name.includes("台灣") ||
+		name.includes("台湾") ||
+		name.includes("香港") ||
+		name.includes("澳門") ||
+		name.includes("澳门")
+	);
+}
+
+export function looksLikeTraditionalChinese(text?: string | null): boolean {
+	const plain = stripHtmlToText(text || "");
+	if (!plain) return false;
+
+	const traditionalMatches =
+		plain.match(/[個們來這說時會國過還樣開關點讓對發經學後裡體與無業當問間長實現應電買賣親聽寫網頁號氣條並歲萬麼為爾]/g)?.length ?? 0;
+	const simplifiedMatches =
+		plain.match(/[个们来这说时会国过还样开关点让对发经学后里体与无业当问间长实现应电买卖亲听写网页号气条并岁万么为尔]/g)?.length ?? 0;
+
+	return traditionalMatches >= 2 && traditionalMatches > simplifiedMatches;
+}
+
 export async function translateIncomingEmail(
 	env: Env,
 	input: { subject?: string | null; body?: string | null },
@@ -151,7 +186,7 @@ export async function translateIncomingEmail(
 	return callOpenAIJson<IncomingEmailTranslation>(env, {
 		name: "incoming_email_translation",
 		instructions:
-			"你是多语言客服邮件翻译助手，请将收到的邮件内容准确得翻译成中文。请识别邮件原文语言，将主题和正文翻译为简体中文，保留姓名、数字、URL、邮箱地址、产品名称和事实含义。若邮件已经是中文，请规范为简体中文。只返回 JSON。",
+			"你是多语言客服邮件翻译助手，请将收到的邮件内容准确得翻译成中文。请识别邮件原文语言，将主题和正文翻译为简体中文，保留姓名、数字、URL、邮箱地址、产品名称和事实含义。若邮件已经是中文，请规范为简体中文；sourceLanguage 和 sourceLanguageName 仍需区分简体中文与繁体中文，例如 zh-Hans/Simplified Chinese 或 zh-Hant/Traditional Chinese。只返回 JSON。",
 		input: {
 			subject,
 			bodyText,
@@ -200,7 +235,11 @@ export async function translateReplyForPreview(
 	);
 	const originalHtmlZh = input.html ? input.html : textToHtml(input.text || "");
 
-	if (isChineseLanguage(input.targetLanguage, targetLanguageName)) {
+	const shouldTranslate =
+		!isChineseLanguage(input.targetLanguage, targetLanguageName) ||
+		isTraditionalChineseLanguage(input.targetLanguage, targetLanguageName);
+
+	if (!shouldTranslate) {
 		return {
 			translationRequired: false,
 			targetLanguage: input.targetLanguage,

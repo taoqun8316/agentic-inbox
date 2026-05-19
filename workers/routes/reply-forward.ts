@@ -13,6 +13,8 @@ import {
 	buildReferencesChain,
 	buildThreadingHeaders,
 	resolveOriginalEmail,
+	buildQuotedReplyBlock,
+	stripHtmlToText,
 } from "../lib/email-helpers";
 import { SendEmailRequestSchema } from "../lib/schemas";
 import { Folders } from "../../shared/folders";
@@ -20,6 +22,8 @@ import type { MailboxContext } from "../lib/mailbox";
 import {
 	incomingTranslationToStoredBody,
 	isChineseLanguage,
+	isTraditionalChineseLanguage,
+	looksLikeTraditionalChinese,
 	translateIncomingEmail,
 	translateReplyForPreview,
 	type ReplyTranslationPreview,
@@ -34,6 +38,53 @@ type TranslationUpdateStub = {
 		translation: Record<string, string | null>,
 	) => Promise<EmailFull | null>;
 };
+
+const TRAILING_QUOTED_REPLY_BLOCK_RE =
+	/(\s*(?:<br\s*\/?>)\s*)?<blockquote\b[\s\S]*<\/blockquote>\s*$/i;
+
+function replaceTrailingQuoteWithOriginal(
+	html: string | undefined,
+	originalEmail: EmailFull,
+): string | undefined {
+	if (!html || !TRAILING_QUOTED_REPLY_BLOCK_RE.test(html)) return html;
+
+	const quotedBlock = buildQuotedReplyBlock({
+		date: originalEmail.date,
+		sender: originalEmail.sender,
+		body: originalEmail.body ?? undefined,
+	});
+
+	if (!quotedBlock) return html;
+	return html.replace(TRAILING_QUOTED_REPLY_BLOCK_RE, quotedBlock);
+}
+
+function resolveTargetLanguageForReply(
+	target: { language: string; languageName: string },
+	originalEmail: EmailFull,
+): { language: string; languageName: string } {
+	if (
+		isChineseLanguage(target.language, target.languageName) &&
+		!isTraditionalChineseLanguage(target.language, target.languageName) &&
+		looksLikeTraditionalChinese(`${originalEmail.subject || ""}\n${originalEmail.body || ""}`)
+	) {
+		return {
+			language: "zh-Hant",
+			languageName: "Traditional Chinese",
+		};
+	}
+
+	return target;
+}
+
+function shouldTranslateReplyToTarget(
+	language: string,
+	languageName: string,
+): boolean {
+	return (
+		!isChineseLanguage(language, languageName) ||
+		isTraditionalChineseLanguage(language, languageName)
+	);
+}
 
 async function ensureOriginalLanguage(
 	c: AppContext,
@@ -90,9 +141,15 @@ async function resolveReplyBodyForRecipientLanguage(
 	targetLanguage?: string | null;
 	targetLanguageName?: string | null;
 }> {
-	const target = await ensureOriginalLanguage(c, stub, originalEmail);
-	if (!target.language || isChineseLanguage(target.language, target.languageName)) {
-		return { html: input.html, text: input.text };
+	const target = resolveTargetLanguageForReply(
+		await ensureOriginalLanguage(c, stub, originalEmail),
+		originalEmail,
+	);
+	const normalizedHtml = replaceTrailingQuoteWithOriginal(input.html, originalEmail);
+	const normalizedText = normalizedHtml ? stripHtmlToText(normalizedHtml) : input.text;
+
+	if (!target.language || !shouldTranslateReplyToTarget(target.language, target.languageName)) {
+		return { html: normalizedHtml, text: normalizedText };
 	}
 
 	const matchingPreview =
@@ -102,16 +159,24 @@ async function resolveReplyBodyForRecipientLanguage(
 			: null;
 
 	const preview = matchingPreview ?? await translateReplyForPreview(c.env, {
-		html: input.html,
-		text: input.text,
+		html: normalizedHtml,
+		text: normalizedText,
 		targetLanguage: target.language,
 		targetLanguageName: target.languageName,
 	});
+	const translatedHtml = replaceTrailingQuoteWithOriginal(
+		preview.translatedHtml,
+		originalEmail,
+	);
+	const originalHtmlZh = replaceTrailingQuoteWithOriginal(
+		preview.originalHtmlZh || normalizedHtml,
+		originalEmail,
+	);
 
 	return {
-		html: preview.translatedHtml,
-		text: preview.translatedText,
-		replyBodyZh: preview.originalHtmlZh || input.html || input.text || null,
+		html: translatedHtml,
+		text: translatedHtml ? stripHtmlToText(translatedHtml) : preview.translatedText,
+		replyBodyZh: originalHtmlZh || normalizedHtml || normalizedText || null,
 		targetLanguage: preview.targetLanguage,
 		targetLanguageName: preview.targetLanguageName,
 	};
@@ -131,14 +196,26 @@ export async function handleReplyTranslationPreview(c: AppContext) {
 	const originalEmail = await resolveOriginalEmail(stub, rawOriginal);
 
 	try {
-		const target = await ensureOriginalLanguage(c, stub, originalEmail);
+		const target = resolveTargetLanguageForReply(
+			await ensureOriginalLanguage(c, stub, originalEmail),
+			originalEmail,
+		);
+		const normalizedHtml = replaceTrailingQuoteWithOriginal(html, originalEmail);
 		const preview = await translateReplyForPreview(c.env, {
-			html,
-			text,
+			html: normalizedHtml,
+			text: normalizedHtml ? stripHtmlToText(normalizedHtml) : text,
 			targetLanguage: target.language,
 			targetLanguageName: target.languageName,
 		});
-		return c.json(preview);
+		return c.json({
+			...preview,
+			originalHtmlZh:
+				replaceTrailingQuoteWithOriginal(preview.originalHtmlZh, originalEmail) ??
+				preview.originalHtmlZh,
+			translatedHtml:
+				replaceTrailingQuoteWithOriginal(preview.translatedHtml, originalEmail) ??
+				preview.translatedHtml,
+		});
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}
