@@ -13,6 +13,19 @@ interface TranslationPreviewDialogProps {
 	onConfirm: () => void;
 }
 
+function PreviewPane({ title, body }: { title: string; body: string }) {
+	return (
+		<div className="flex min-h-0 flex-col overflow-hidden rounded-md border border-kumo-line bg-kumo-base">
+			<div className="shrink-0 border-b border-kumo-line bg-kumo-tint/50 px-3 py-2 text-xs font-medium text-kumo-subtle">
+				{title}
+			</div>
+			<div className="min-h-0 flex-1">
+				<EmailIframe body={body} />
+			</div>
+		</div>
+	);
+}
+
 export default function TranslationPreviewDialog({
 	preview,
 	isSending,
@@ -26,30 +39,27 @@ export default function TranslationPreviewDialog({
 				if (!open && !isSending) onCancel();
 			}}
 		>
-			<Dialog size="lg" className="max-h-[85vh] overflow-y-auto">
-				<Dialog.Title>发送前预览</Dialog.Title>
-				{preview && (
-					<div className="mt-4 space-y-4">
-						<div className="text-sm text-kumo-subtle">
+			<Dialog
+				size="xl"
+				className="flex h-[min(85vh,760px)] max-h-[calc(100vh-2rem)] flex-col overflow-hidden p-0"
+			>
+				<div className="shrink-0 border-b border-kumo-line px-5 pb-3 pt-5">
+					<Dialog.Title>发送前预览</Dialog.Title>
+					{preview && (
+						<div className="mt-3 text-sm text-kumo-subtle">
 							发出语言：{preview.targetLanguageName}
 						</div>
-						<div className="grid gap-4 md:grid-cols-2">
-							<div className="min-h-[220px] overflow-hidden rounded-md border border-kumo-line">
-								<div className="border-b border-kumo-line bg-kumo-tint/50 px-3 py-2 text-xs font-medium text-kumo-subtle">
-									原始回复内容
-								</div>
-								<EmailIframe body={preview.originalHtmlZh} autoSize />
-							</div>
-							<div className="min-h-[220px] overflow-hidden rounded-md border border-kumo-line">
-								<div className="border-b border-kumo-line bg-kumo-tint/50 px-3 py-2 text-xs font-medium text-kumo-subtle">
-									将发送给客户
-								</div>
-								<EmailIframe body={preview.translatedHtml} autoSize />
-							</div>
+					)}
+				</div>
+				{preview && (
+					<div className="min-h-0 flex-1 p-5">
+						<div className="grid h-full min-h-0 grid-rows-2 gap-4 md:grid-cols-2 md:grid-rows-1">
+							<PreviewPane title="原始回复内容" body={preview.originalHtmlZh} />
+							<PreviewPane title="将发送给客户" body={preview.translatedHtml} />
 						</div>
 					</div>
 				)}
-				<div className="mt-5 flex justify-end gap-2">
+				<div className="flex shrink-0 justify-end gap-2 border-t border-kumo-line px-5 py-3">
 					<Button
 						type="button"
 						variant="secondary"
