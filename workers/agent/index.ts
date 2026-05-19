@@ -69,6 +69,7 @@ Write like a real person. Short, direct, flowing prose. Get to the point. Plain 
 - Before drafting ANY reply, carefully read the full thread history.
 - NEVER repeat information that was already shared in a prior message in the thread.
 - Your reply should only contain NEW information or directly respond to what the person just said. Move the conversation forward, don't rehash it.
+- For customer replies, draft the body in Simplified Chinese for the operator to review. Do not translate the draft body into the customer's language yourself; the send flow translates it before delivery.
 
 ## Who Are You Replying To?
 Use the name the person gives in their email body / signature. That's their name - use it. The "from" address is where you send the reply, but the name in the email is how you greet them.
@@ -202,7 +203,7 @@ function createEmailTools(env: Env, mailboxId: string) {
 
 		draft_reply: defineTool({
 			description:
-				"Draft a reply to an existing email and save it to the Drafts folder. This does NOT send — it saves a draft for the operator to review and send from the UI. Write the body as plain text — no HTML tags.",
+				"Draft a reply to an existing email and save it to the Drafts folder. This does NOT send — it saves a Simplified Chinese draft for the operator to review and send from the UI. Write the body as plain text — no HTML tags.",
 			parameters: z.object({
 				originalEmailId: z
 					.string()
@@ -214,7 +215,7 @@ function createEmailTools(env: Env, mailboxId: string) {
 				body: z
 					.string()
 					.describe(
-						"The plain text body of the reply. No HTML — just write normally.",
+						"The Simplified Chinese plain text body of the reply. No HTML — just write normally.",
 					),
 			}),
 			execute: async ({ originalEmailId, to, subject, body }): Promise<unknown> => {
@@ -423,7 +424,7 @@ export class EmailAgent extends AIChatAgent<any> {
 			console.warn("Pre-read failed, agent will use tools:", (e as Error).message);
 		}
 
-		let autoPrompt = `A new email just arrived. Draft an appropriate response using draft_reply.
+		let autoPrompt = `A new email just arrived. Draft an appropriate Simplified Chinese response using draft_reply.
 
 Email details:
 - Mailbox: ${emailData.mailboxId}
@@ -448,7 +449,7 @@ This is the first message in the thread (no prior conversation).`;
 
 		autoPrompt += `
 
-Based on the email content and thread context above, draft a reply using draft_reply. If you need more context, use get_thread with thread ID "${emailData.threadId}".`;
+Based on the email content and thread context above, draft a Simplified Chinese reply using draft_reply. Do not translate the draft into the sender's language. If you need more context, use get_thread with thread ID "${emailData.threadId}".`;
 
 		// Fresh context for auto-draft -- don't include prior chat history
 		// to avoid confusing the model with old messages and tool calls

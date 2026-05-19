@@ -36,7 +36,7 @@ export default function TranslationPreviewDialog({
 						<div className="grid gap-4 md:grid-cols-2">
 							<div className="min-h-[220px] overflow-hidden rounded-md border border-kumo-line">
 								<div className="border-b border-kumo-line bg-kumo-tint/50 px-3 py-2 text-xs font-medium text-kumo-subtle">
-									中文回复
+									原始回复内容
 								</div>
 								<EmailIframe body={preview.originalHtmlZh} autoSize />
 							</div>

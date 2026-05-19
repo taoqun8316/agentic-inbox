@@ -66,6 +66,21 @@ function extractResponseText(response: OpenAIResponseJson): string {
 	return "";
 }
 
+function splitTrailingQuotedReplyHtml(html: string): {
+	replyHtml: string;
+	quotedHtml: string;
+} {
+	const match = html.match(
+		/(\s*(?:<br\s*\/?>)\s*)?(<blockquote\b[\s\S]*<\/blockquote>)\s*$/i,
+	);
+	if (!match) return { replyHtml: html, quotedHtml: "" };
+
+	return {
+		replyHtml: html.slice(0, html.length - match[0].length),
+		quotedHtml: match[0],
+	};
+}
+
 async function callOpenAIJson<T>(
 	env: Env,
 	options: {
@@ -177,10 +192,13 @@ export async function translateReplyForPreview(
 	},
 ): Promise<ReplyTranslationPreview> {
 	const targetLanguageName = input.targetLanguageName || input.targetLanguage;
+	const { replyHtml, quotedHtml } = input.html
+		? splitTrailingQuotedReplyHtml(input.html)
+		: { replyHtml: "", quotedHtml: "" };
 	const originalTextZh = truncateForModel(
-		stripHtmlToText(input.html || "") || input.text || "",
+		input.html ? stripHtmlToText(replyHtml) : input.text || "",
 	);
-	const originalHtmlZh = input.html || textToHtml(input.text || "");
+	const originalHtmlZh = input.html ? input.html : textToHtml(input.text || "");
 
 	if (isChineseLanguage(input.targetLanguage, targetLanguageName)) {
 		return {
@@ -197,7 +215,7 @@ export async function translateReplyForPreview(
 	const translated = await callOpenAIJson<{ translatedText: string }>(env, {
 		name: "outgoing_reply_translation",
 		instructions:
-			"你是多语言客服邮件翻译助手，请根据我的中文邮件回复内容要点，生成专业的客服邮件回复，并翻译成对应邮件原文中的语言。在生成客户邮件回复时，要尽量符合客服沟通的专业口吻，内容准确、礼貌且条理清晰。\n若用户有额外的具体指令（如需要加入个性化问候、引用订单号等），请在回复邮件中根据上下文进行融入。若你对原始邮件语言的判断存在不确定性，请尽量根据上下文信息推断；若无法确定，可向用户确认。\n请保留姓名、数字、URL、邮箱地址、产品名称和引用上下文，不要添加解释或 markdown。只返回 JSON。",
+			"你是多语言客服邮件翻译助手，请根据我的中文邮件回复内容要点，生成专业的客服邮件回复，并翻译成对应邮件原文中的语言。在生成客户邮件回复时，要尽量符合客服沟通的专业口吻，内容准确、礼貌且条理清晰。\n若用户有额外的具体指令（如需要加入个性化问候、引用订单号等），请在回复邮件中根据上下文进行融入。若你对原始邮件语言的判断存在不确定性，请尽量根据上下文信息推断；若无法确定，可向用户确认。\n请只生成将发送给客户的当前回复正文；邮件历史引用块会由系统原样附回，不需要改写或翻译。请保留姓名、数字、URL、邮箱地址、产品名称和必要上下文，不要添加解释或 markdown。只返回 JSON。",
 		input: {
 			targetLanguage: input.targetLanguage,
 			targetLanguageName,
@@ -220,7 +238,9 @@ export async function translateReplyForPreview(
 		targetLanguageName,
 		originalHtmlZh,
 		originalTextZh,
-		translatedHtml: textToHtml(translated.translatedText),
-		translatedText: translated.translatedText,
+		translatedHtml: `${textToHtml(translated.translatedText)}${quotedHtml}`,
+		translatedText: quotedHtml
+			? `${translated.translatedText}\n\n${stripHtmlToText(quotedHtml)}`
+			: translated.translatedText,
 	};
 }
