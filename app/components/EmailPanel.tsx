@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useKumoToastManager } from "@cloudflare/kumo";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Folders } from "shared/folders";
 import EmailPanelDialogs from "~/components/email-panel/EmailPanelDialogs";
@@ -11,13 +11,14 @@ import EmailPanelHeader from "~/components/email-panel/EmailPanelHeader";
 import EmailPanelToolbar from "~/components/email-panel/EmailPanelToolbar";
 import SingleMessageView from "~/components/email-panel/SingleMessageView";
 import ThreadMessage from "~/components/email-panel/ThreadMessage";
+import TranslationPreviewDialog from "~/components/TranslationPreviewDialog";
 import { splitEmailList, toEmailListValue } from "~/lib/utils";
 import api from "~/services/api";
 import { useDeleteEmail, useEmail, useMoveEmail, useReplyToEmail, useSendEmail, useThreadReplies, useUpdateEmail } from "~/queries/emails";
 import { useFolders } from "~/queries/folders";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
-import type { Email, Folder, Mailbox } from "~/types";
+import type { Email, Folder, Mailbox, ReplyTranslationPreview } from "~/types";
 
 function EmailPanelSkeleton() {
 	return (
@@ -47,6 +48,13 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 	const { closePanel, startCompose } = useUIStore();
 	const toastManager = useKumoToastManager();
 	const [isSending, setIsSending] = useState(false);
+	const [draftTranslationPreview, setDraftTranslationPreview] =
+		useState<ReplyTranslationPreview | null>(null);
+	const pendingDraftSendRef = useRef<{
+		target: Email;
+		emailData: Record<string, unknown>;
+		originalEmail?: Email;
+	} | null>(null);
 	const [sourceViewEmail, setSourceViewEmail] = useState<Email | null>(null);
 	const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
 	const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
@@ -87,6 +95,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	if (!email) return <EmailPanelSkeleton />;
 
+	const displaySubject = email.translated_subject_zh || email.subject;
 	const toggleStar = () => { if (mailboxId) updateEmail.mutate({ mailboxId, id: email.id, data: { starred: !email.starred } }); };
 	const handleMove = (folderId: string) => { if (mailboxId) { moveEmailMut.mutate({ mailboxId, id: email.id, folderId }); closePanel(); } };
 	const handleDelete = () => { if (mailboxId) { if (!window.confirm("Are you sure you want to delete this email?")) return; deleteEmailMut.mutate({ mailboxId, id: email.id }); closePanel(); } };
@@ -104,6 +113,21 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 		deleteEmailMut.mutate({ mailboxId, id: target.id });
 		toastManager.add({ title: "Draft discarded" });
 		if (target.id === emailId) closePanel();
+	};
+
+	const sendPreparedDraft = async (
+		target: Email,
+		emailData: Record<string, unknown>,
+		originalEmail?: Email,
+		translationPreview?: ReplyTranslationPreview,
+	) => {
+		const payload = translationPreview
+			? { ...emailData, translationPreview }
+			: emailData;
+		if (originalEmail) await replyMut.mutateAsync({ mailboxId: mailboxId!, emailId: originalEmail.id, email: payload }); else await sendEmailMut.mutateAsync({ mailboxId: mailboxId!, email: payload });
+		await deleteEmailMut.mutateAsync({ mailboxId: mailboxId!, id: target.id });
+		toastManager.add({ title: "Email sent!" });
+		if (isDraftFolder) closePanel();
 	};
 
 	const handleSendDraft = async (draftMsg?: Email) => {
@@ -127,14 +151,41 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				html: target.body || "",
 				text: target.body ? target.body.replace(/<[^>]*>/g, "").trim() : "",
 			};
-			if (originalEmail) await replyMut.mutateAsync({ mailboxId, emailId: originalEmail.id, email: emailData }); else await sendEmailMut.mutateAsync({ mailboxId, email: emailData });
-			await deleteEmailMut.mutateAsync({ mailboxId, id: target.id });
-			toastManager.add({ title: "Email sent!" });
-			if (isDraftFolder) closePanel();
+			if (originalEmail) {
+				const preview = await api.previewReplyTranslation(mailboxId, originalEmail.id, emailData);
+				if (preview.translationRequired) {
+					pendingDraftSendRef.current = { target, emailData, originalEmail };
+					setDraftTranslationPreview(preview);
+					return;
+				}
+			}
+			await sendPreparedDraft(target, emailData, originalEmail);
 		} catch (err) {
 			const message = (err instanceof Error ? err.message : null) || "Failed to send email.";
 			toastManager.add({ title: message, variant: "error" });
 		} finally { setIsSending(false); }
+	};
+
+	const confirmDraftTranslationPreview = async () => {
+		const pending = pendingDraftSendRef.current;
+		if (!pending || !draftTranslationPreview) return;
+		const preview = draftTranslationPreview;
+		pendingDraftSendRef.current = null;
+		setDraftTranslationPreview(null);
+		setIsSending(true);
+		try {
+			await sendPreparedDraft(pending.target, pending.emailData, pending.originalEmail, preview);
+		} catch (err) {
+			const message = (err instanceof Error ? err.message : null) || "Failed to send email.";
+			toastManager.add({ title: message, variant: "error" });
+		} finally {
+			setIsSending(false);
+		}
+	};
+
+	const cancelDraftTranslationPreview = () => {
+		pendingDraftSendRef.current = null;
+		setDraftTranslationPreview(null);
 	};
 
 	const hasThread = allMessages.length > 1;
@@ -176,7 +227,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 			/>
 
 			<EmailPanelHeader
-				subject={email.subject}
+				subject={displaySubject}
 				messageCount={allMessages.length}
 				showThreadCount={hasThread}
 			/>
@@ -222,6 +273,12 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				previewImage={previewImage}
 				onCloseSource={() => setSourceViewEmail(null)}
 				onClosePreview={() => setPreviewImage(null)}
+			/>
+			<TranslationPreviewDialog
+				preview={draftTranslationPreview}
+				isSending={isSending}
+				onCancel={cancelDraftTranslationPreview}
+				onConfirm={confirmDraftTranslationPreview}
 			/>
 		</div>
 	);

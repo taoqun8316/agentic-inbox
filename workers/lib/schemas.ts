@@ -29,6 +29,15 @@ export interface EmailMetadata {
 	thread_id?: string | null;
 	folder_id?: string | null;
 	snippet?: string | null;
+	source_language?: string | null;
+	source_language_name?: string | null;
+	translated_subject_zh?: string | null;
+	translated_body_zh?: string | null;
+	summary_zh?: string | null;
+	translation_status?: string | null;
+	reply_body_zh?: string | null;
+	target_language?: string | null;
+	target_language_name?: string | null;
 }
 
 export interface EmailFull extends EmailMetadata {
@@ -84,6 +93,17 @@ export const SendEmailRequestSchema = z
 		in_reply_to: z.string().optional(),
 		references: z.array(z.string()).optional(),
 		thread_id: z.string().optional(),
+		translationPreview: z
+			.object({
+				translationRequired: z.boolean(),
+				targetLanguage: z.string(),
+				targetLanguageName: z.string(),
+				originalHtmlZh: z.string(),
+				originalTextZh: z.string(),
+				translatedHtml: z.string(),
+				translatedText: z.string(),
+			})
+			.optional(),
 	})
 	.refine((data) => data.html || data.text, {
 		message: "Either 'html' or 'text' must be provided",

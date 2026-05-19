@@ -7,6 +7,7 @@ import { FloppyDiskIcon, PaperPlaneTiltIcon, XIcon } from "@phosphor-icons/react
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
+import TranslationPreviewDialog from "./TranslationPreviewDialog";
 
 export default function ComposePanel() {
 	const { mailboxId, folder } = useParams<{
@@ -30,6 +31,10 @@ export default function ComposePanel() {
 		error,
 		isSavingDraft,
 		isSending,
+		isPreviewingTranslation,
+		translationPreview,
+		confirmTranslationPreview,
+		cancelTranslationPreview,
 		formTitle,
 		handleSaveDraft,
 		handleSend,
@@ -170,16 +175,22 @@ export default function ComposePanel() {
 								type="submit"
 								variant="primary"
 								size="sm"
-								loading={isSending}
-								disabled={isSavingDraft || isSending}
+								loading={isSending || isPreviewingTranslation}
+								disabled={isSavingDraft || isSending || isPreviewingTranslation}
 								icon={<PaperPlaneTiltIcon size={14} />}
 							>
-								{isSending ? "Sending..." : "Send"}
+								{isPreviewingTranslation ? "Previewing..." : isSending ? "Sending..." : "Send"}
 							</Button>
 						</div>
 					</div>
 				</div>
 			</form>
+			<TranslationPreviewDialog
+				preview={translationPreview}
+				isSending={isSending}
+				onCancel={cancelTranslationPreview}
+				onConfirm={confirmTranslationPreview}
+			/>
 		</div>
 	);
 }

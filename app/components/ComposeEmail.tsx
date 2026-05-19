@@ -8,6 +8,7 @@ import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
 import { useUIStore } from "~/hooks/useUIStore";
+import TranslationPreviewDialog from "./TranslationPreviewDialog";
 
 export default function ComposeEmail() {
 	const { mailboxId, folder } = useParams<{
@@ -33,6 +34,10 @@ export default function ComposeEmail() {
 		error,
 		isSavingDraft,
 		isSending,
+		isPreviewingTranslation,
+		translationPreview,
+		confirmTranslationPreview,
+		cancelTranslationPreview,
 		formTitle,
 		handleSaveDraft,
 		handleSend,
@@ -132,15 +137,21 @@ export default function ComposeEmail() {
 								type="submit"
 								variant="primary"
 								size="sm"
-								loading={isSending}
-								disabled={isSavingDraft || isSending}
+								loading={isSending || isPreviewingTranslation}
+								disabled={isSavingDraft || isSending || isPreviewingTranslation}
 								icon={<PaperPlaneTiltIcon size={14} />}
 							>
-								{isSending ? "Sending..." : "Send"}
+								{isPreviewingTranslation ? "Previewing..." : isSending ? "Sending..." : "Send"}
 							</Button>
 						</div>
 					</div>
 				</form>
+				<TranslationPreviewDialog
+					preview={translationPreview}
+					isSending={isSending}
+					onCancel={cancelTranslationPreview}
+					onConfirm={confirmTranslationPreview}
+				/>
 			</Dialog>
 		</Dialog.Root>
 	);

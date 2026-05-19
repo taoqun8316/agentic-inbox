@@ -5,4 +5,6 @@
 export interface Env extends Cloudflare.Env {
 	POLICY_AUD: string;
 	TEAM_DOMAIN: string;
+	OPENAI_API_KEY?: string;
+	OPENAI_TRANSLATION_MODEL?: string;
 }

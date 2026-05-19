@@ -29,6 +29,15 @@ export const emails = sqliteTable("emails", {
 	thread_id: text("thread_id"),
 	message_id: text("message_id"),
 	raw_headers: text("raw_headers"),
+	source_language: text("source_language"),
+	source_language_name: text("source_language_name"),
+	translated_subject_zh: text("translated_subject_zh"),
+	translated_body_zh: text("translated_body_zh"),
+	summary_zh: text("summary_zh"),
+	translation_status: text("translation_status"),
+	reply_body_zh: text("reply_body_zh"),
+	target_language: text("target_language"),
+	target_language_name: text("target_language_name"),
 });
 
 export const attachments = sqliteTable("attachments", {

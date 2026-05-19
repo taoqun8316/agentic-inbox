@@ -16,10 +16,14 @@ import {
 	listMailboxes,
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
-import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
+import { handleReplyEmail, handleForwardEmail, handleReplyTranslationPreview } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
+import {
+	incomingTranslationToStoredBody,
+	translateIncomingEmail,
+} from "./lib/openai-translation";
 
 type AppContext = Context<MailboxContext>;
 
@@ -269,6 +273,7 @@ app.post("/api/v1/mailboxes/:mailboxId/threads/:threadId/read", async (c: AppCon
 // -- Reply / Forward ------------------------------------------------
 
 app.post("/api/v1/mailboxes/:mailboxId/emails/:id/reply", handleReplyEmail);
+app.post("/api/v1/mailboxes/:mailboxId/emails/:id/reply/translation-preview", handleReplyTranslationPreview);
 app.post("/api/v1/mailboxes/:mailboxId/emails/:id/forward", handleForwardEmail);
 
 // -- Folders --------------------------------------------------------
@@ -328,6 +333,31 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 // -- Receive inbound email ------------------------------------------
 
 const MAX_EMAIL_SIZE = 25 * 1024 * 1024;
+
+async function translateAndStoreIncomingEmail(
+	env: Env,
+	stub: DurableObjectStub,
+	emailId: string,
+	subject: string,
+	body: string,
+) {
+	try {
+		const translation = await translateIncomingEmail(env, { subject, body });
+		await (stub as any).updateEmailTranslation(emailId, {
+			source_language: translation.sourceLanguage,
+			source_language_name: translation.sourceLanguageName,
+			translated_subject_zh: translation.translatedSubjectZh,
+			translated_body_zh: incomingTranslationToStoredBody(translation),
+			summary_zh: translation.summaryZh,
+			translation_status: "done",
+		});
+	} catch (e) {
+		console.error("Incoming email translation failed:", (e as Error).message);
+		await (stub as any).updateEmailTranslation(emailId, {
+			translation_status: "failed",
+		});
+	}
+}
 
 async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
 	if (streamSize > MAX_EMAIL_SIZE) throw new Error(`Email too large: ${streamSize} bytes exceeds ${MAX_EMAIL_SIZE} byte limit`);
@@ -400,7 +430,18 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		body: parsedEmail.html || parsedEmail.text || "",
 		in_reply_to: inReplyTo, email_references: emailReferences.length > 0 ? JSON.stringify(emailReferences) : null,
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
+		translation_status: env.OPENAI_API_KEY ? "pending" : "skipped",
 	}, attachmentData);
+
+	if (env.OPENAI_API_KEY) {
+		ctx.waitUntil(translateAndStoreIncomingEmail(
+			env,
+			stub as unknown as DurableObjectStub,
+			messageId,
+			parsedEmail.subject || "",
+			parsedEmail.html || parsedEmail.text || "",
+		));
+	}
 
 	const agentStub = env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName(mailboxId));
 	ctx.waitUntil(agentStub.fetch(new Request("https://agents/onNewEmail", {

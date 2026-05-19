@@ -40,6 +40,15 @@ export interface Email {
 	email_references?: string | null;
 	message_id?: string | null;
 	raw_headers?: string | null;
+	source_language?: string | null;
+	source_language_name?: string | null;
+	translated_subject_zh?: string | null;
+	translated_body_zh?: string | null;
+	summary_zh?: string | null;
+	translation_status?: string | null;
+	reply_body_zh?: string | null;
+	target_language?: string | null;
+	target_language_name?: string | null;
 	attachments?: Attachment[];
 	snippet?: string | null;
 	// Thread aggregate fields (only present in threaded list view)
@@ -48,6 +57,16 @@ export interface Email {
 	participants?: string;
 	needs_reply?: boolean;
 	has_draft?: boolean;
+}
+
+export interface ReplyTranslationPreview {
+	translationRequired: boolean;
+	targetLanguage: string;
+	targetLanguageName: string;
+	originalHtmlZh: string;
+	originalTextZh: string;
+	translatedHtml: string;
+	translatedText: string;
 }
 
 export interface Attachment {

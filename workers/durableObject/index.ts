@@ -87,6 +87,15 @@ interface EmailData {
 	thread_id?: string | null;
 	message_id?: string | null;
 	raw_headers?: string | null;
+	source_language?: string | null;
+	source_language_name?: string | null;
+	translated_subject_zh?: string | null;
+	translated_body_zh?: string | null;
+	summary_zh?: string | null;
+	translation_status?: string | null;
+	reply_body_zh?: string | null;
+	target_language?: string | null;
+	target_language_name?: string | null;
 }
 
 interface AttachmentData {
@@ -526,6 +535,29 @@ export class MailboxDO extends DurableObject<Env> {
 		return this.getEmail(id);
 	}
 
+	async updateEmailTranslation(
+		id: string,
+		translation: {
+			source_language?: string | null;
+			source_language_name?: string | null;
+			translated_subject_zh?: string | null;
+			translated_body_zh?: string | null;
+			summary_zh?: string | null;
+			translation_status?: string | null;
+			reply_body_zh?: string | null;
+			target_language?: string | null;
+			target_language_name?: string | null;
+		},
+	) {
+		this.db
+			.update(schema.emails)
+			.set(translation)
+			.where(eq(schema.emails.id, id))
+			.run();
+
+		return this.getEmail(id);
+	}
+
 	async markThreadRead(threadId: string) {
 		this.ctx.storage.sql.exec(
 			`UPDATE emails SET read = 1 WHERE thread_id = ? AND read = 0`,
@@ -862,6 +894,15 @@ export class MailboxDO extends DurableObject<Env> {
 				thread_id: email.thread_id ?? null,
 				message_id: email.message_id ?? null,
 				raw_headers: email.raw_headers ?? null,
+				source_language: email.source_language ?? null,
+				source_language_name: email.source_language_name ?? null,
+				translated_subject_zh: email.translated_subject_zh ?? null,
+				translated_body_zh: email.translated_body_zh ?? null,
+				summary_zh: email.summary_zh ?? null,
+				translation_status: email.translation_status ?? null,
+				reply_body_zh: email.reply_body_zh ?? null,
+				target_language: email.target_language ?? null,
+				target_language_name: email.target_language_name ?? null,
 			})
 			.run();
 

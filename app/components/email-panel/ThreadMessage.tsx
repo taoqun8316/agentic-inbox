@@ -11,6 +11,7 @@ import {
 	PencilSimpleIcon,
 	TrashIcon,
 } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
 import EmailAttachmentList from "~/components/EmailAttachmentList";
 import EmailIframe from "~/components/EmailIframe";
 import {
@@ -68,9 +69,18 @@ export default function ThreadMessage({
 	onViewSource,
 	onPreviewImage,
 }: ThreadMessageProps) {
+	const [showOriginal, setShowOriginal] = useState(false);
 	const isSelf = email.sender === mailboxEmail;
 	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
 	const senderLabel = isDraft ? "Draft reply" : isSelf ? "You" : email.sender;
+	const hasTranslation = Boolean(email.translated_body_zh);
+	const displayBody = !showOriginal && email.translated_body_zh
+		? email.translated_body_zh
+		: email.body || "";
+
+	useEffect(() => {
+		setShowOriginal(false);
+	}, [email.id]);
 
 	if (!isExpanded) {
 		return (
@@ -91,7 +101,7 @@ export default function ThreadMessage({
 							</span>
 						</div>
 						<p className="text-xs text-kumo-subtle truncate">
-							{stripHtml(email.body || "").slice(0, 80)}
+							{stripHtml(email.translated_body_zh || email.body || "").slice(0, 80)}
 						</p>
 					</div>
 					<CaretDownIcon size={14} className="text-kumo-subtle shrink-0" />
@@ -157,9 +167,35 @@ export default function ThreadMessage({
 				</div>
 
 				<div className="md:ml-[42px]">
+					{(hasTranslation || email.summary_zh) && (
+						<div className="mb-3 rounded-md border border-kumo-line bg-kumo-tint/40 p-3">
+							<div className="flex items-start justify-between gap-3">
+								{email.summary_zh && !showOriginal ? (
+									<p className="text-sm text-kumo-default leading-5">
+										<span className="font-medium">中文摘要：</span>
+										{email.summary_zh}
+									</p>
+								) : (
+									<p className="text-sm text-kumo-subtle">
+										当前显示原文
+									</p>
+								)}
+								{hasTranslation && (
+									<Button
+										type="button"
+										variant="secondary"
+										size="sm"
+										onClick={() => setShowOriginal((value) => !value)}
+									>
+										{showOriginal ? "查看译文" : "查看原文"}
+									</Button>
+								)}
+							</div>
+						</div>
+					)}
 					<EmailIframe
 						body={rewriteInlineImages(
-							email.body || "",
+							displayBody,
 							mailboxId || "",
 							email.id,
 							email.attachments,

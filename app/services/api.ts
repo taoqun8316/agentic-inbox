@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { Email, Folder, Mailbox } from "~/types";
+import type { Email, Folder, Mailbox, ReplyTranslationPreview } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -144,6 +144,8 @@ const api = {
 	) => post<{ draft_id: string }>(`/api/v1/mailboxes/${mailboxId}/drafts`, draft),
 	replyToEmail: (mailboxId: string, emailId: string, email: unknown) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/reply`, email),
+	previewReplyTranslation: (mailboxId: string, emailId: string, email: unknown) =>
+		post<ReplyTranslationPreview>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/reply/translation-preview`, email),
 	forwardEmail: (mailboxId: string, emailId: string, email: unknown) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/forward`, email),
 

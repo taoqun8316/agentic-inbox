@@ -168,4 +168,18 @@ export const mailboxMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_emails_folder_date ON emails(folder_id, date DESC);
         `,
 	},
+	{
+		name: "9_add_translation_fields",
+		sql: txn(`
+            ALTER TABLE emails ADD COLUMN source_language TEXT;
+            ALTER TABLE emails ADD COLUMN source_language_name TEXT;
+            ALTER TABLE emails ADD COLUMN translated_subject_zh TEXT;
+            ALTER TABLE emails ADD COLUMN translated_body_zh TEXT;
+            ALTER TABLE emails ADD COLUMN summary_zh TEXT;
+            ALTER TABLE emails ADD COLUMN translation_status TEXT;
+            ALTER TABLE emails ADD COLUMN reply_body_zh TEXT;
+            ALTER TABLE emails ADD COLUMN target_language TEXT;
+            ALTER TABLE emails ADD COLUMN target_language_name TEXT;
+        `),
+	},
 ];

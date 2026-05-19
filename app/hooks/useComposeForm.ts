@@ -17,6 +17,8 @@ import {
 import { useDeleteEmail, useForwardEmail, useReplyToEmail, useSaveDraft, useSendEmail } from "~/queries/emails";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
+import api from "~/services/api";
+import type { ReplyTranslationPreview } from "~/types";
 
 function appendUniqueAddress(
 	addresses: string[],
@@ -41,6 +43,25 @@ interface ComposeFormFields {
 	showCcBcc: boolean;
 	subject: string;
 	body: string;
+}
+
+interface ComposeEmailPayload {
+	to: string | string[] | undefined;
+	cc: string | string[] | undefined;
+	bcc: string | string[] | undefined;
+	from: string | { email: string; name: string };
+	subject: string;
+	html: string;
+	text: string;
+	translationPreview?: ReplyTranslationPreview;
+}
+
+interface PendingSend {
+	emailData: ComposeEmailPayload;
+	onClose: () => void;
+	mode: ReturnType<typeof useUIStore.getState>["composeOptions"]["mode"];
+	originalId?: string;
+	draftId?: string;
 }
 
 const EMPTY_FIELDS: ComposeFormFields = {
@@ -181,7 +202,11 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const [error, setError] = useState<string | null>(null);
 	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [isSending, setIsSending] = useState(false);
+	const [isPreviewingTranslation, setIsPreviewingTranslation] = useState(false);
+	const [translationPreview, setTranslationPreview] =
+		useState<ReplyTranslationPreview | null>(null);
 	const lastInitializedOptionsRef = useRef<typeof composeOptions | null>(null);
+	const pendingSendRef = useRef<PendingSend | null>(null);
 	const isDraftEdit = !!composeOptions.draftEmail;
 
 	const formTitle = useMemo(() => {
@@ -207,6 +232,8 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setShowCcBcc(initialFields.showCcBcc);
 		setSubject(initialFields.subject);
 		setBody(initialFields.body);
+		setTranslationPreview(null);
+		pendingSendRef.current = null;
 	}, [composeOptions, currentMailbox?.email, sigBlock]);
 
 	const handleSaveDraft = async () => {
@@ -232,8 +259,27 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		finally { setIsSavingDraft(false); }
 	};
 
+	const sendPreparedEmail = async (
+		pending: PendingSend,
+		preview?: ReplyTranslationPreview,
+	) => {
+		const emailData = preview
+			? { ...pending.emailData, translationPreview: preview }
+			: pending.emailData;
+		setIsSending(true); toastManager.add({ title: "Sending email..." });
+		try {
+			if ((pending.mode === "reply" || pending.mode === "reply-all") && pending.originalId) await replyMutation.mutateAsync({ mailboxId: mailboxId!, emailId: pending.originalId, email: emailData });
+			else if (pending.mode === "forward" && pending.originalId) await forwardMutation.mutateAsync({ mailboxId: mailboxId!, emailId: pending.originalId, email: emailData });
+			else await sendEmailMutation.mutateAsync({ mailboxId: mailboxId!, email: emailData });
+			if (pending.draftId) deleteEmailMutation.mutate({ mailboxId: mailboxId!, id: pending.draftId });
+			toastManager.add({ title: "Email sent!" });
+			pending.onClose();
+		} catch (err: unknown) { const message = (err instanceof Error ? err.message : null) || "Failed to send email."; setError(message); toastManager.add({ title: message, variant: "error" }); }
+		finally { setIsSending(false); }
+	};
+
 	const handleSend = async (e: FormEvent, onClose: () => void) => {
-		e.preventDefault(); if (isSending) return; setError(null);
+		e.preventDefault(); if (isSending || isPreviewingTranslation) return; setError(null);
 		if (!currentMailbox || !mailboxId) { setError("No mailbox selected."); return; }
 		const toRecipients = splitEmailList(to);
 		if (toRecipients.length === 0) { setError("Add at least one recipient."); return; }
@@ -249,18 +295,44 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 			html: body,
 			text: htmlToPlainText(body),
 		};
-		const draftId = composeOptions.draftEmail?.id; const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to;
-		setIsSending(true); toastManager.add({ title: "Sending email..." });
-		try {
-			if ((mode === "reply" || mode === "reply-all") && originalId) await replyMutation.mutateAsync({ mailboxId, emailId: originalId, email: emailData });
-			else if (mode === "forward" && originalId) await forwardMutation.mutateAsync({ mailboxId, emailId: originalId, email: emailData });
-			else await sendEmailMutation.mutateAsync({ mailboxId, email: emailData });
-			if (draftId) deleteEmailMutation.mutate({ mailboxId, id: draftId });
-			toastManager.add({ title: "Email sent!" });
-			onClose();
-		} catch (err: unknown) { const message = (err instanceof Error ? err.message : null) || "Failed to send email."; setError(message); toastManager.add({ title: message, variant: "error" }); }
-		finally { setIsSending(false); }
+		const draftId = composeOptions.draftEmail?.id; const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to || undefined;
+		const pending: PendingSend = { emailData, onClose, mode, originalId, draftId };
+
+		if ((mode === "reply" || mode === "reply-all") && originalId) {
+			setIsPreviewingTranslation(true);
+			try {
+				const preview = await api.previewReplyTranslation(mailboxId, originalId, emailData);
+				if (preview.translationRequired) {
+					pendingSendRef.current = pending;
+					setTranslationPreview(preview);
+					return;
+				}
+			} catch (err: unknown) {
+				const message = (err instanceof Error ? err.message : null) || "Failed to preview translation.";
+				setError(message);
+				toastManager.add({ title: message, variant: "error" });
+				return;
+			} finally {
+				setIsPreviewingTranslation(false);
+			}
+		}
+
+		await sendPreparedEmail(pending);
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
+	const confirmTranslationPreview = async () => {
+		const pending = pendingSendRef.current;
+		if (!pending || !translationPreview) return;
+		const preview = translationPreview;
+		setTranslationPreview(null);
+		pendingSendRef.current = null;
+		await sendPreparedEmail(pending, preview);
+	};
+
+	const cancelTranslationPreview = () => {
+		setTranslationPreview(null);
+		pendingSendRef.current = null;
+	};
+
+	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, isPreviewingTranslation, translationPreview, confirmTranslationPreview, cancelTranslationPreview, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
 }
