@@ -24,7 +24,6 @@ export interface IncomingEmailTranslation {
 	sourceLanguageName: string;
 	translatedSubjectZh: string;
 	translatedBodyZh: string;
-	summaryZh: string;
 }
 
 export interface ReplyTranslationPreview {
@@ -137,7 +136,7 @@ export async function translateIncomingEmail(
 	return callOpenAIJson<IncomingEmailTranslation>(env, {
 		name: "incoming_email_translation",
 		instructions:
-			"Identify the source language of the email, translate the subject and body into Simplified Chinese, and write a concise Simplified Chinese summary. Preserve names, numbers, URLs, product names, and factual meaning. If the email is already Chinese, normalize to Simplified Chinese. Return JSON only.",
+			"你是多语言客服邮件翻译助手，请将收到的邮件内容准确得翻译成中文。请识别邮件原文语言，将主题和正文翻译为简体中文，保留姓名、数字、URL、邮箱地址、产品名称和事实含义。若邮件已经是中文，请规范为简体中文。只返回 JSON。",
 		input: {
 			subject,
 			bodyText,
@@ -151,14 +150,12 @@ export async function translateIncomingEmail(
 				sourceLanguageName: { type: "string" },
 				translatedSubjectZh: { type: "string" },
 				translatedBodyZh: { type: "string" },
-				summaryZh: { type: "string" },
 			},
 			required: [
 				"sourceLanguage",
 				"sourceLanguageName",
 				"translatedSubjectZh",
 				"translatedBodyZh",
-				"summaryZh",
 			],
 		},
 	});
@@ -200,7 +197,7 @@ export async function translateReplyForPreview(
 	const translated = await callOpenAIJson<{ translatedText: string }>(env, {
 		name: "outgoing_reply_translation",
 		instructions:
-			"Translate the outgoing email from Chinese into the customer's target language. Keep the tone professional and natural. Preserve names, numbers, URLs, email addresses, product names, and quoted context. Do not add explanations or markdown. Return JSON only.",
+			"你是多语言客服邮件翻译助手，请根据我的中文邮件回复内容要点，生成专业的客服邮件回复，并翻译成对应邮件原文中的语言。在生成客户邮件回复时，要尽量符合客服沟通的专业口吻，内容准确、礼貌且条理清晰。\n若用户有额外的具体指令（如需要加入个性化问候、引用订单号等），请在回复邮件中根据上下文进行融入。若你对原始邮件语言的判断存在不确定性，请尽量根据上下文信息推断；若无法确定，可向用户确认。\n请保留姓名、数字、URL、邮箱地址、产品名称和引用上下文，不要添加解释或 markdown。只返回 JSON。",
 		input: {
 			targetLanguage: input.targetLanguage,
 			targetLanguageName,

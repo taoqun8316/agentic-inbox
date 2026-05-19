@@ -232,8 +232,9 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 });
 
 app.get("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
-	const email = await c.var.mailboxStub.getEmail(c.req.param("id")!);
+	let email = await c.var.mailboxStub.getEmail(c.req.param("id")!);
 	if (!email) return c.json({ error: "Email not found" }, 404);
+	email = await scheduleTranslationForEmail(c, email);
 	return new Response(JSON.stringify(email), {
 		headers: { "Content-Type": "application/json" },
 	});
@@ -262,7 +263,11 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/move", async (c: AppContext) =
 // -- Threads --------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/threads/:threadId", async (c: AppContext) => {
-	return c.json(await (c.var.mailboxStub as any).getThreadEmails(c.req.param("threadId")!));
+	const emails = await (c.var.mailboxStub as any).getThreadEmails(c.req.param("threadId")!);
+	const scheduled = await Promise.all(
+		emails.map((email: any) => scheduleTranslationForEmail(c, email)),
+	);
+	return c.json(scheduled);
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/threads/:threadId/read", async (c: AppContext) => {
@@ -348,7 +353,7 @@ async function translateAndStoreIncomingEmail(
 			source_language_name: translation.sourceLanguageName,
 			translated_subject_zh: translation.translatedSubjectZh,
 			translated_body_zh: incomingTranslationToStoredBody(translation),
-			summary_zh: translation.summaryZh,
+			summary_zh: null,
 			translation_status: "done",
 		});
 	} catch (e) {
@@ -356,6 +361,35 @@ async function translateAndStoreIncomingEmail(
 		await (stub as any).updateEmailTranslation(emailId, {
 			translation_status: "failed",
 		});
+	}
+}
+
+function shouldTranslateEmail(env: Env, email: any) {
+	if (!env.OPENAI_API_KEY) return false;
+	if (!email?.id || !email.body) return false;
+	if (email.folder_id !== Folders.INBOX) return false;
+	if (email.translated_body_zh) return false;
+	return !email.translation_status || email.translation_status === "skipped";
+}
+
+async function scheduleTranslationForEmail(c: AppContext, email: any) {
+	if (!shouldTranslateEmail(c.env, email)) return email;
+
+	try {
+		await (c.var.mailboxStub as any).updateEmailTranslation(email.id, {
+			translation_status: "pending",
+		});
+		c.executionCtx.waitUntil(translateAndStoreIncomingEmail(
+			c.env,
+			c.var.mailboxStub as unknown as DurableObjectStub,
+			email.id,
+			email.subject || "",
+			email.body || "",
+		));
+		return { ...email, translation_status: "pending" };
+	} catch (e) {
+		console.error("Failed to schedule email translation:", (e as Error).message);
+		return email;
 	}
 }
 

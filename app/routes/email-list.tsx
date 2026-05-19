@@ -316,6 +316,7 @@ export default function EmailListRoute() {
 							{emails.map((email) => {
 								const isSelected = selectedEmailId === email.id;
 								const snippet = getSnippetText(email.snippet);
+								const subject = email.translated_subject_zh || email.subject;
 								return (
 									<div
 										key={email.id}
@@ -392,7 +393,7 @@ export default function EmailListRoute() {
 												<span
 													className={hasUnread(email) ? "font-medium text-kumo-default" : "text-kumo-subtle"}
 												>
-													{email.subject}
+													{subject}
 												</span>
 											{snippet && (
 												<span className="text-kumo-subtle font-normal">

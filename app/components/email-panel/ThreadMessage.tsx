@@ -74,6 +74,8 @@ export default function ThreadMessage({
 	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
 	const senderLabel = isDraft ? "Draft reply" : isSelf ? "You" : email.sender;
 	const hasTranslation = Boolean(email.translated_body_zh);
+	const isTranslationPending = email.translation_status === "pending";
+	const isTranslationFailed = email.translation_status === "failed";
 	const displayBody = !showOriginal && email.translated_body_zh
 		? email.translated_body_zh
 		: email.body || "";
@@ -167,17 +169,20 @@ export default function ThreadMessage({
 				</div>
 
 				<div className="md:ml-[42px]">
-					{(hasTranslation || email.summary_zh) && (
+					{(hasTranslation || isTranslationPending || isTranslationFailed) && (
 						<div className="mb-3 rounded-md border border-kumo-line bg-kumo-tint/40 p-3">
 							<div className="flex items-start justify-between gap-3">
-								{email.summary_zh && !showOriginal ? (
-									<p className="text-sm text-kumo-default leading-5">
-										<span className="font-medium">中文摘要：</span>
-										{email.summary_zh}
+								{isTranslationPending ? (
+									<p className="text-sm text-kumo-subtle">
+										正在翻译，稍后自动更新。
+									</p>
+								) : isTranslationFailed ? (
+									<p className="text-sm text-kumo-subtle">
+										翻译失败，请检查 OPENAI_API_KEY 或 Worker 日志。
 									</p>
 								) : (
 									<p className="text-sm text-kumo-subtle">
-										当前显示原文
+										{showOriginal ? "当前显示原文" : "当前显示中文译文"}
 									</p>
 								)}
 								{hasTranslation && (

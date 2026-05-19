@@ -63,7 +63,7 @@ async function ensureOriginalLanguage(
 			source_language_name: translation.sourceLanguageName,
 			translated_subject_zh: translation.translatedSubjectZh,
 			translated_body_zh: incomingTranslationToStoredBody(translation),
-			summary_zh: translation.summaryZh,
+			summary_zh: null,
 			translation_status: "done",
 		},
 	);

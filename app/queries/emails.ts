@@ -57,6 +57,10 @@ export function useEmail(
 			: ["emails", "_disabled_detail"],
 		queryFn: () => api.getEmail(mailboxId!, emailId!) as Promise<Email>,
 		enabled: !!mailboxId && !!emailId,
+		refetchInterval: (query) => {
+			const email = query.state.data as Email | undefined;
+			return email?.translation_status === "pending" ? 3000 : false;
+		},
 	});
 }
 
@@ -88,6 +92,12 @@ export function useThreadReplies(
 			return emails;
 		},
 		enabled: !!mailboxId && !!threadId,
+		refetchInterval: (query) => {
+			const emails = query.state.data as Email[] | undefined;
+			return emails?.some((email) => email.translation_status === "pending")
+				? 3000
+				: false;
+		},
 	});
 }
 

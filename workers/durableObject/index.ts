@@ -169,7 +169,13 @@ export class MailboxDO extends DurableObject<Env> {
 				email_references: schema.emails.email_references,
 				thread_id: schema.emails.thread_id,
 				folder_id: schema.emails.folder_id,
-				snippet: sql<string>`SUBSTR(${schema.emails.body}, 1, 300)`,
+				source_language: schema.emails.source_language,
+				source_language_name: schema.emails.source_language_name,
+				translated_subject_zh: schema.emails.translated_subject_zh,
+				translated_body_zh: schema.emails.translated_body_zh,
+				summary_zh: schema.emails.summary_zh,
+				translation_status: schema.emails.translation_status,
+				snippet: sql<string>`SUBSTR(COALESCE(${schema.emails.translated_body_zh}, ${schema.emails.body}), 1, 300)`,
 			})
 			.from(schema.emails)
 			.where(conditions.length > 0 ? and(...conditions) : undefined)
@@ -276,7 +282,10 @@ export class MailboxDO extends DurableObject<Env> {
 					lp.id, lp.subject, lp.sender, lp.recipient, lp.date,
 					lp.read, lp.starred, lp.thread_id, lp.folder_id,
 					lp.in_reply_to, lp.email_references,
-					SUBSTR(lp.body, 1, 300) as snippet,
+					lp.source_language, lp.source_language_name,
+					lp.translated_subject_zh, lp.translated_body_zh,
+					lp.summary_zh, lp.translation_status,
+					SUBSTR(COALESCE(lp.translated_body_zh, lp.body), 1, 300) as snippet,
 					ds.thread_count, ds.thread_unread_count, ds.participants
 				FROM latest_per_group lp
 				JOIN draft_stats ds ON lp.draft_group_key = ds.draft_group_key
@@ -364,7 +373,10 @@ export class MailboxDO extends DurableObject<Env> {
 				lif.id, lif.subject, lif.sender, lif.recipient, lif.date,
 				lif.read, lif.starred, lif.thread_id, lif.folder_id,
 				lif.in_reply_to, lif.email_references,
-				SUBSTR(lif.body, 1, 300) as snippet,
+				lif.source_language, lif.source_language_name,
+				lif.translated_subject_zh, lif.translated_body_zh,
+				lif.summary_zh, lif.translation_status,
+				SUBSTR(COALESCE(lif.translated_body_zh, lif.body), 1, 300) as snippet,
 				cs.thread_count, cs.thread_unread_count, cs.participants,
 				CASE WHEN lmc.folder_id != (SELECT id FROM folders WHERE name = 'sent' LIMIT 1)
 					AND lmc.folder_id != (SELECT id FROM folders WHERE name = 'draft' LIMIT 1)
@@ -738,7 +750,10 @@ export class MailboxDO extends DurableObject<Env> {
 			SELECT e.id, e.subject, e.sender, e.recipient, e.cc, e.bcc, e.date,
 				e.read, e.starred, e.in_reply_to, e.email_references,
 				e.thread_id, e.folder_id,
-				SUBSTR(e.body, 1, 300) as snippet,
+				e.source_language, e.source_language_name,
+				e.translated_subject_zh, e.translated_body_zh,
+				e.summary_zh, e.translation_status,
+				SUBSTR(COALESCE(e.translated_body_zh, e.body), 1, 300) as snippet,
 				f.name as folder_name
 			FROM emails e
 			LEFT JOIN folders f ON e.folder_id = f.id

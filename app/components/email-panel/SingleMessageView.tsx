@@ -22,6 +22,8 @@ export default function SingleMessageView({
 }: SingleMessageViewProps) {
 	const [showOriginal, setShowOriginal] = useState(false);
 	const hasTranslation = Boolean(email.translated_body_zh);
+	const isTranslationPending = email.translation_status === "pending";
+	const isTranslationFailed = email.translation_status === "failed";
 	const displayBody = !showOriginal && email.translated_body_zh
 		? email.translated_body_zh
 		: email.body || "";
@@ -51,17 +53,20 @@ export default function SingleMessageView({
 				</div>
 			</div>
 
-			{(hasTranslation || email.summary_zh) && (
+			{(hasTranslation || isTranslationPending || isTranslationFailed) && (
 				<div className="px-4 py-3 border-b border-kumo-line bg-kumo-tint/40 md:px-6">
 					<div className="flex items-start justify-between gap-3">
-						{email.summary_zh && !showOriginal ? (
-							<p className="text-sm text-kumo-default leading-5">
-								<span className="font-medium">中文摘要：</span>
-								{email.summary_zh}
+						{isTranslationPending ? (
+							<p className="text-sm text-kumo-subtle">
+								正在翻译，稍后自动更新。
+							</p>
+						) : isTranslationFailed ? (
+							<p className="text-sm text-kumo-subtle">
+								翻译失败，请检查 OPENAI_API_KEY 或 Worker 日志。
 							</p>
 						) : (
 							<p className="text-sm text-kumo-subtle">
-								当前显示原文
+								{showOriginal ? "当前显示原文" : "当前显示中文译文"}
 							</p>
 						)}
 						{hasTranslation && (
